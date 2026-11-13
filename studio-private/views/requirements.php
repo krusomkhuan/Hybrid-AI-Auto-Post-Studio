@@ -1,0 +1,3 @@
+<?php use function Studio\e; $title='ตรวจความพร้อม'; ?>
+<section class="setup-panel"><div class="eyebrow">HOSTING READINESS</div><h1>ตรวจความพร้อมก่อนติดตั้ง</h1><p>กรุณาเปิด Extension/ปรับ PHP ผ่าน Control Panel แล้วโหลดหน้าใหม่ โดยไม่ต้องใช้ SSH</p><ul class="readiness-list"><?php foreach($requirements as $label=>$passed): ?><li><span><?= e($label) ?></span><strong class="<?= $passed?'text-success':'text-danger' ?>"><?= $passed?'พร้อม':'ต้องตรวจสอบ' ?></strong></li><?php endforeach; ?></ul><p class="small text-secondary">หน้านี้ไม่แสดง Config หรือรายละเอียดฐานข้อมูล หากแก้ค่าผ่านเว็บไม่ได้ให้ผู้ให้บริการโฮสติ้งช่วยเปิดความสามารถที่ขาด</p></section>
+

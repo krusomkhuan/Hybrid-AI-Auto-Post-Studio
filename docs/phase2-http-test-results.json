@@ -1,0 +1,33 @@
+{
+  "kind": "Isolated HTTP tests; no external OAuth or social API requests",
+  "count": 27,
+  "checks": [
+    "Fresh base install succeeds",
+    "Queue requires authentication",
+    "Phase 2 upgrade shown before migration",
+    "Authenticated additive upgrade succeeds",
+    "Settings save without exposing stored secrets",
+    "Meta OAuth refuses insecure HTTP callback",
+    "Google start redirects to official OAuth without contacting it",
+    "Invalid callback state safely rejected",
+    "HMAC credential displayed once",
+    "Signed n8n request returns paused state",
+    "HTTP replay blocked",
+    "Same event with fresh nonce returns cached result",
+    "Unsigned publish request blocked",
+    "GET cannot trigger publishing",
+    "Unsigned media capability URL blocked",
+    "Workflow download contains no credentials or active automation",
+    "Screen renders dashboard",
+    "Screen renders contents",
+    "Screen renders library",
+    "Screen renders edit",
+    "Screen renders manual",
+    "Screen renders accounts",
+    "Screen renders integrations",
+    "Screen renders queue",
+    "Screen renders settings",
+    "Screen renders audit",
+    "Canonical origin prevents www/CSP mismatch"
+  ]
+}

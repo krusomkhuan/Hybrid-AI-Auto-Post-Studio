@@ -1,0 +1,202 @@
+{
+  "name": "Hybrid Studio · Phase 2 · Publishing Scheduler",
+  "active": false,
+  "nodes": [
+    {
+      "id": "every-10-seconds",
+      "name": "Every 10 seconds",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "seconds",
+              "secondsInterval": 10
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "nonce",
+      "name": "Nonce",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "action": "generate",
+        "encodingType": "hex",
+        "stringLength": 32,
+        "dataPropertyName": "nonce"
+      }
+    },
+    {
+      "id": "prepare-request",
+      "name": "Prepare Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const timestamp = Math.floor(Date.now() / 1000).toString();\nconst nonce = $json.nonce;\nconst body = JSON.stringify({event_id: 'n8n_' + String($execution.id).slice(-20) + '_' + nonce.slice(0,32), operation:'tick'});\nconst url = 'https://STUDIO-URL-REPLACE/studio/integration.php';\nreturn [{json:{timestamp,nonce,body,url}}];"
+      }
+    },
+    {
+      "id": "body-hash",
+      "name": "Body Hash",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "action": "hash",
+        "type": "SHA256",
+        "value": "={{ $json.body }}",
+        "encoding": "hex",
+        "dataPropertyName": "bodyHash"
+      }
+    },
+    {
+      "id": "sign-request",
+      "name": "Sign Request",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 2,
+      "position": [
+        880,
+        0
+      ],
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "value": "={{ ['POST', $json.url.replace(/^https?:\\/\\/[^/]+/, ''), $json.timestamp, $json.nonce, $json.bodyHash].join('\\n') }}",
+        "encoding": "hex",
+        "dataPropertyName": "signature"
+      },
+      "credentials": {
+        "crypto": {
+          "id": "SELECT_YOUR_CRYPTO_CREDENTIAL",
+          "name": "Studio HMAC"
+        }
+      }
+    },
+    {
+      "id": "studio-publish-step",
+      "name": "Studio Publish Step",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Studio-Timestamp",
+              "value": "={{ $json.timestamp }}"
+            },
+            {
+              "name": "X-Studio-Nonce",
+              "value": "={{ $json.nonce }}"
+            },
+            {
+              "name": "X-Studio-Signature",
+              "value": "={{ $json.signature }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $json.body }}",
+        "options": {
+          "timeout": 120000
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every 10 seconds": {
+      "main": [
+        [
+          {
+            "node": "Nonce",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Nonce": {
+      "main": [
+        [
+          {
+            "node": "Prepare Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Request": {
+      "main": [
+        [
+          {
+            "node": "Body Hash",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Body Hash": {
+      "main": [
+        [
+          {
+            "node": "Sign Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sign Request": {
+      "main": [
+        [
+          {
+            "node": "Studio Publish Step",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Bangkok",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "none",
+    "saveManualExecutions": false
+  },
+  "pinData": {}
+}

@@ -1,0 +1,17 @@
+.tools/
+.local/
+dist/
+studio-private/config*.php
+!studio-private/config.example.php
+/Database*.txt
+.env
+.env.*
+!.env.example
+**/application.key
+**/*secret*.txt
+**/*credentials*.json
+studio-private/var/*
+!studio-private/var/.gitkeep
+*.log
+__pycache__/
+

@@ -28,11 +28,18 @@ final class IntegrationSettings {
 }
 
 final class ProviderError extends \RuntimeException {
-    public function __construct(public string $category,public string $safeCode,public int $retryAfter=0){parent::__construct('Provider request failed: '.$safeCode);}
+    public function __construct(public string $category,public string $safeCode,public int $retryAfter=0,public array $diagnostics=[]){parent::__construct('Provider request failed: '.$safeCode);}
+    public function connectionMessage(): string {
+        if($this->category!=='network')return 'แพลตฟอร์มตอบกลับข้อผิดพลาดระหว่างเชื่อมบัญชี: '.$this->safeCode;
+        $message=$this->safeCode==='transport_28'?'การติดต่อจากเซิร์ฟเวอร์ไปยัง API หมดเวลารอ':'เซิร์ฟเวอร์ติดต่อ API ไม่สำเร็จ';
+        $d=$this->diagnostics;
+        return $message.' ('.$this->safeCode.')'.($d?' — '.$d['host'].' / '.$d['step'].' / '.$d['phase'].' / '.$d['elapsed_ms'].' ms':'').' กรุณาเริ่ม Connect ใหม่ หากเกิดซ้ำให้แจ้งผู้ดูแลโฮสติ้งพร้อมข้อความนี้';
+    }
 }
 
 final class ProviderHttp {
     private static ?\Closure $testTransport=null;
+    private static ?\CurlShareHandle $graphDnsCache=null;
     public static function setTestTransport(\Closure $transport): void {
         if(PHP_SAPI!=='cli'||config('environment')!=='test')throw new \LogicException('Test transport is CLI-only in an isolated test environment');
         self::$testTransport=$transport;
@@ -46,10 +53,35 @@ final class ProviderHttp {
             CURLOPT_HEADERFUNCTION=>static function($ch,$line)use(&$responseHeaders){$p=explode(':',$line,2);if(count($p)===2)$responseHeaders[strtolower(trim($p[0]))]=trim($p[1]);return strlen($line);},
             CURLOPT_WRITEFUNCTION=>static function($ch,$chunk)use(&$response){if(strlen($response)+strlen($chunk)>4194304)return 0;$response.=$chunk;return strlen($chunk);},
         ]);
+        // Hosting diagnostic: Graph HTTPS works over IPv4; its IPv6 route is unavailable.
+        // Keep other providers on their default address selection and keep TLS verification enabled.
+        if(strtolower((string)parse_url($url,PHP_URL_HOST))==='graph.facebook.com'){
+            curl_setopt($ch,CURLOPT_IPRESOLVE,CURL_IPRESOLVE_V4);
+            // New easy handles otherwise discard their DNS cache after every OAuth step.
+            // Share only DNS within this PHP execution, never cookies, headers or tokens.
+            if(self::$graphDnsCache===null){
+                $share=curl_share_init();
+                if(!curl_share_setopt($share,CURLSHOPT_SHARE,CURL_LOCK_DATA_DNS))throw new ProviderError('network','dns_cache_setup_failed');
+                self::$graphDnsCache=$share;
+            }
+            if(!curl_setopt($ch,CURLOPT_SHARE,self::$graphDnsCache))throw new ProviderError('network','dns_cache_attach_failed');
+            curl_setopt($ch,CURLOPT_DNS_CACHE_TIMEOUT,60);
+        }
         if($body!==null)curl_setopt($ch,CURLOPT_POSTFIELDS,$body);
-        $ok=curl_exec($ch);$status=(int)curl_getinfo($ch,CURLINFO_RESPONSE_CODE);$errno=curl_errno($ch);curl_close($ch);
-        if($ok===false)throw new ProviderError('network','transport_'.$errno);
+        $ok=curl_exec($ch);$info=curl_getinfo($ch);$info['appconnect_time']=curl_getinfo($ch,CURLINFO_APPCONNECT_TIME);$status=(int)$info['http_code'];$errno=curl_errno($ch);curl_close($ch);
+        if($ok===false)throw new ProviderError('network','transport_'.$errno,0,self::transportDiagnostics($url,$info));
         return ['status'=>$status,'headers'=>$responseHeaders,'body'=>$response,'json'=>json_decode($response,true)];
+    }
+    // Only fixed labels and timings: never expose URLs, query strings, headers or raw cURL errors.
+    public static function transportDiagnostics(string $url,array $info): array {
+        self::validateUrl($url);
+        $path=parse_url($url,PHP_URL_PATH)??'';
+        $step='api';
+        foreach(['token'=>'~/(?:oauth/access_token|token)$~','identity'=>'~/me$~','permissions'=>'~/me/permissions$~','pages'=>'~/me/accounts$~','channels'=>'~/youtube/v3/channels$~'] as $label=>$pattern){
+            if(preg_match($pattern,$path)){$step=$label;break;}
+        }
+        $phase=empty($info['namelookup_time'])?'dns':(empty($info['connect_time'])?'connect':(empty($info['appconnect_time'])?'tls':(empty($info['starttransfer_time'])?'response':'transfer')));
+        return ['host'=>strtolower(parse_url($url,PHP_URL_HOST)),'step'=>$step,'phase'=>$phase,'elapsed_ms'=>(int)round(max(0,(float)($info['total_time']??0))*1000)];
     }
     public static function validateUrl(string $url): void {
         $p=parse_url($url);

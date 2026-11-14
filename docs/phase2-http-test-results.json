@@ -1,6 +1,6 @@
 {
   "kind": "Isolated HTTP tests; no external OAuth or social API requests",
-  "count": 27,
+  "count": 36,
   "checks": [
     "Fresh base install succeeds",
     "Queue requires authentication",
@@ -17,6 +17,15 @@
     "Unsigned publish request blocked",
     "GET cannot trigger publishing",
     "Unsigned media capability URL blocked",
+    "Old HMAC workflow still works with no header key configured",
+    "Header key displayed once and differs from HMAC secret",
+    "Header Auth request accepted over HTTP",
+    "Wrong X-Studio-Key rejected over HTTP",
+    "HMAC secret sent as X-Studio-Key rejected",
+    "HMAC still accepted alongside header key",
+    "Header Auth workflow uses only n8n 1.106.3 nodes, no Crypto, no key",
+    "Missing workflow file shows clear 404 instead of 500",
+    "Revoked header key rejected; HMAC unaffected",
     "Workflow download contains no credentials or active automation",
     "Screen renders dashboard",
     "Screen renders contents",

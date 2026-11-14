@@ -30,7 +30,7 @@ if($page==='oauth_callback'){
         if(!in_array($provider,['meta','google'],true))throw new \DomainException('Provider ไม่ถูกต้อง');
         $count=OAuth::complete($provider,is_string($_GET['state']??null)?$_GET['state']:'',is_string($_GET['code']??null)?$_GET['code']:'',(int)$user['id'],isset($_GET['error']));
         audit('oauth_connected','social_connections',null,['provider'=>$provider,'destinations'=>$count]);flash('success','เชื่อมบัญชีและนำเข้าปลายทางที่ได้รับอนุญาตแล้ว '.$count.' รายการ');
-    }catch(ProviderError $e){flash('danger','แพลตฟอร์มยังไม่อนุญาตให้เชื่อมต่อ: '.$e->safeCode);}
+    }catch(ProviderError $e){flash('danger',$e->connectionMessage());}
     catch(\DomainException $e){flash('danger',$e->getMessage());}
     redirect('accounts');
 }
@@ -103,6 +103,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             case 'rotate_n8n_key':
                 if(!$phase2Ready)throw new \DomainException('กรุณาอัปเกรด Phase 2 ก่อน');
                 $key=bin2hex(random_bytes(32));IntegrationSettings::putSecret('n8n_hmac_secret',$key);$_SESSION['new_n8n_key']=$key;audit('n8n_key_rotated','system',null);redirect('integrations');
+            case 'rotate_n8n_header_key':
+                if(!$phase2Ready)throw new \DomainException('กรุณาอัปเกรด Phase 2 ก่อน');
+                // Separate from the HMAC secret. Only a SHA-256 hash is stored; the key is shown once.
+                $key=bin2hex(random_bytes(32));IntegrationSettings::put('n8n_header_key_hash',hash('sha256',$key));IntegrationSettings::put('n8n_header_key_created_at',now());$_SESSION['new_n8n_header_key']=$key;audit('n8n_header_key_rotated','system',null);redirect('integrations');
+            case 'revoke_n8n_header_key':
+                if(!$phase2Ready)throw new \DomainException('กรุณาอัปเกรด Phase 2 ก่อน');
+                IntegrationSettings::put('n8n_header_key_hash','');IntegrationSettings::put('n8n_header_key_created_at','');audit('n8n_header_key_revoked','system',null);flash('success','ยกเลิก Header Key แล้ว Workflow ที่ใช้ Key นี้จะถูกปฏิเสธ ส่วน HMAC ยังใช้ได้ตามเดิม');redirect('integrations');
             case 'oauth_start':
                 if(!$phase2Ready)throw new \DomainException('กรุณาอัปเกรด Phase 2 ก่อน');
                 header('Location: '.OAuth::start(text_input('provider',20,true),(int)$user['id']),true,303);exit;
@@ -173,8 +180,8 @@ try {
             render('queue',compact('jobs','phase2Ready'));break;
         case 'workflow':
             if(!$phase2Ready)throw new \DomainException('กรุณาอัปเกรด Phase 2 ก่อน');
-            $template=file_get_contents(STUDIO_ROOT.'/workflows/phase2-publishing.json');$template=str_replace('https://STUDIO-URL-REPLACE/studio',rtrim((string)config('app_url'),'/'),$template);
-            header('Content-Type: application/json; charset=utf-8');header('Content-Disposition: attachment; filename="Hybrid-Studio-Phase2-Publishing.json"');echo $template;break;
+            $headerVariant=($_GET['variant']??'')==='header';$workflowFile=$headerVariant?'phase2-publishing-header-auth.json':'phase2-publishing.json';$template=is_file(STUDIO_ROOT.'/workflows/'.$workflowFile)?file_get_contents(STUDIO_ROOT.'/workflows/'.$workflowFile):false;if($template===false){http_response_code(404);render('message',['title'=>'ไม่พบไฟล์ Workflow บน Hosting','message'=>'กรุณาอัปโหลด '.$workflowFile.' ไปที่ studio-private/workflows/ แล้วลองใหม่']);break;}$template=str_replace('https://STUDIO-URL-REPLACE/studio',rtrim((string)config('app_url'),'/'),$template);
+            header('Content-Type: application/json; charset=utf-8');header('Content-Disposition: attachment; filename="'.($headerVariant?'Hybrid-Studio-Phase2-Publishing-HeaderAuth.json':'Hybrid-Studio-Phase2-Publishing.json').'"');echo $template;break;
         case 'media':
             if (!in_array($_SERVER['REQUEST_METHOD'], ['GET','HEAD'],true)) { http_response_code(405); exit; }
             $media = Db::one('SELECT * FROM media_assets WHERE id=?', [int_id($_GET['id'] ?? null)]);

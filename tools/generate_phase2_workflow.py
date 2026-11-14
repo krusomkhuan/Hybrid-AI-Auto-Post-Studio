@@ -27,3 +27,20 @@ workflow={'name':'Hybrid Studio · Phase 2 · Publishing Scheduler','active':Fal
 folder=root/'studio-private/workflows';folder.mkdir(exist_ok=True)
 (folder/'phase2-publishing.json').write_text(json.dumps(workflow,ensure_ascii=False,indent=2),encoding='utf-8')
 print('Created inactive template: Crypto V2 credential required; no key embedded')
+
+# Header Auth variant for n8n 1.106.3: that release does not know Crypto Node V2 (it renders as "?").
+# Uses only Schedule Trigger 1.2, Code 2 and HTTP Request 4.2 with a built-in Header Auth credential.
+prepare_header="""// event_id is an idempotency key only; authentication is the X-Studio-Key Header Auth credential.
+const eventId = 'n8n_' + String($execution.id).slice(-20) + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+const body = JSON.stringify({ event_id: eventId, operation: 'tick' });
+const url = 'https://STUDIO-URL-REPLACE/studio/integration.php';
+return [{ json: { url, body } }];"""
+header_nodes=[
+node('Every 10 seconds','scheduleTrigger',{'rule':{'interval':[{'field':'seconds','secondsInterval':10}]}},1.2,0),
+node('Prepare Request','code',{'jsCode':prepare_header},2,240),
+node('Studio Publish Step','httpRequest',{'method':'POST','url':'={{ $json.url }}','authentication':'genericCredentialType','genericAuthType':'httpHeaderAuth','sendHeaders':True,'headerParameters':{'parameters':[{'name':'Content-Type','value':'application/json'}]},'sendBody':True,'contentType':'raw','rawContentType':'application/json','body':'={{ $json.body }}','options':{'timeout':120000}},4.2,480,{'httpHeaderAuth':{'id':'SELECT_YOUR_HEADER_AUTH_CREDENTIAL','name':'Studio n8n Header Key'}}),
+]
+header_connections={header_nodes[i]['name']:{'main':[[{'node':header_nodes[i+1]['name'],'type':'main','index':0}]]} for i in range(len(header_nodes)-1)}
+header_workflow={'name':'Hybrid Studio · Phase 2 · Publishing Scheduler (Header Auth)','active':False,'nodes':header_nodes,'connections':header_connections,'settings':workflow['settings'],'pinData':{}}
+(folder/'phase2-publishing-header-auth.json').write_text(json.dumps(header_workflow,ensure_ascii=False,indent=2),encoding='utf-8')
+print('Created inactive Header Auth template for n8n 1.106.3: select a Header Auth credential (X-Studio-Key); no key embedded')

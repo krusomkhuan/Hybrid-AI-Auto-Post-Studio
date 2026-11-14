@@ -83,6 +83,21 @@ try:
     check('Unsigned publish request blocked',client.post(api,json={'event_id':'invalid_qa'},timeout=20).status_code==401)
     check('GET cannot trigger publishing',client.get(api,timeout=20).status_code==405)
     check('Unsigned media capability URL blocked',client.get('http://127.0.0.1:8098/studio/media-fetch.php?job=1&expires=1',timeout=20).status_code==403)
+    check('Old HMAC workflow still works with no header key configured',client.post(api,data=body,headers=signed(secrets.token_hex(16)),timeout=20).status_code==200)
+    r=post('integrations','rotate_n8n_header_key');match=re.search(r'id="n8n_new_header_key" value="([a-f0-9]{64})"',r.text);assert match
+    header_key=match[1];check('Header key displayed once and differs from HMAC secret','id="n8n_new_header_key"' not in get('integrations').text and header_key!=secret)
+    hbody=json.dumps({'event_id':'http_header_qa_1','operation':'tick'},separators=(',',':'))
+    r=client.post(api,data=hbody,headers={'Content-Type':'application/json','X-Studio-Key':header_key},timeout=20);check('Header Auth request accepted over HTTP',r.status_code==200 and r.json()['status']=='DISABLED')
+    check('Wrong X-Studio-Key rejected over HTTP',client.post(api,data=hbody,headers={'Content-Type':'application/json','X-Studio-Key':secrets.token_hex(32)},timeout=20).status_code==401)
+    check('HMAC secret sent as X-Studio-Key rejected',client.post(api,data=hbody,headers={'Content-Type':'application/json','X-Studio-Key':secret},timeout=20).status_code==401)
+    check('HMAC still accepted alongside header key',client.post(api,data=body,headers=signed(secrets.token_hex(16)),timeout=20).status_code==200)
+    r=get('workflow',variant='header');hw=r.json();types={n['type']:n['typeVersion'] for n in hw['nodes']}
+    check('Header Auth workflow uses only n8n 1.106.3 nodes, no Crypto, no key',hw['active'] is False and types=={'n8n-nodes-base.scheduleTrigger':1.2,'n8n-nodes-base.code':2,'n8n-nodes-base.httpRequest':4.2} and header_key not in r.text and secret not in r.text and 'http://127.0.0.1:8098/studio/integration.php' in r.text and 'HeaderAuth' in r.headers.get('Content-Disposition',''))
+    (private/'workflows'/'phase2-publishing-header-auth.json').rename(private/'workflows'/'missing.bak')
+    r=get('workflow',variant='header');check('Missing workflow file shows clear 404 instead of 500',r.status_code==404 and 'phase2-publishing-header-auth.json' in r.text)
+    (private/'workflows'/'missing.bak').rename(private/'workflows'/'phase2-publishing-header-auth.json')
+    post('integrations','revoke_n8n_header_key')
+    check('Revoked header key rejected; HMAC unaffected',client.post(api,data=hbody,headers={'Content-Type':'application/json','X-Studio-Key':header_key},timeout=20).status_code==401 and client.post(api,data=body,headers=signed(secrets.token_hex(16)),timeout=20).status_code==200)
     r=get('workflow');workflow=r.json();check('Workflow download contains no credentials or active automation',workflow['active'] is False and secret not in r.text and 'isolated-google-secret' not in r.text and 'http://127.0.0.1:8098/studio/integration.php' in r.text)
     for route in ['dashboard','contents','library','edit','manual','accounts','integrations','queue','settings','audit']:
         r=get(route);check('Screen renders '+route,r.status_code==200)

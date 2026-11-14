@@ -41,11 +41,21 @@
         "Nonce replay rejected",
         "Invalid HMAC cannot dispatch",
         "Expired signed request cannot dispatch",
+        "Header key rejected before one is created",
+        "Header key stored as hash only",
+        "Valid header key accepted",
+        "Header key does not depend on timestamp\/nonce",
+        "Wrong header key rejected",
+        "Malformed header key rejected",
+        "HMAC secret is not accepted as header key",
+        "Wrong header key does not fall back to valid HMAC",
+        "HMAC still accepted while header key is configured",
+        "Revoked header key rejected",
         "Duplicate event returns saved result without repeating work",
         "Reusing event ID with changed payload rejected",
         "Disconnected channel cannot provide token",
         "Disconnect preserves published history"
     ],
-    "count": 44,
+    "count": 54,
     "external_calls": 0
 }

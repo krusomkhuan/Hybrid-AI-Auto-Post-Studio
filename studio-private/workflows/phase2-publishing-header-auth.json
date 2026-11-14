@@ -1,0 +1,109 @@
+{
+  "name": "Hybrid Studio · Phase 2 · Publishing Scheduler (Header Auth)",
+  "active": false,
+  "nodes": [
+    {
+      "id": "every-10-seconds",
+      "name": "Every 10 seconds",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "seconds",
+              "secondsInterval": 10
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "prepare-request",
+      "name": "Prepare Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// event_id is an idempotency key only; authentication is the X-Studio-Key Header Auth credential.\nconst eventId = 'n8n_' + String($execution.id).slice(-20) + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);\nconst body = JSON.stringify({ event_id: eventId, operation: 'tick' });\nconst url = 'https://STUDIO-URL-REPLACE/studio/integration.php';\nreturn [{ json: { url, body } }];"
+      }
+    },
+    {
+      "id": "studio-publish-step",
+      "name": "Studio Publish Step",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.url }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $json.body }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "SELECT_YOUR_HEADER_AUTH_CREDENTIAL",
+          "name": "Studio n8n Header Key"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every 10 seconds": {
+      "main": [
+        [
+          {
+            "node": "Prepare Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Request": {
+      "main": [
+        [
+          {
+            "node": "Studio Publish Step",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Bangkok",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "none",
+    "saveManualExecutions": false
+  },
+  "pinData": {}
+}
